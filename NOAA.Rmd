@@ -1,33 +1,193 @@
 ---
-title: "NOAA"
+title: "U.S. storm data in relation to population health and property damage"
 author: "Patrick Siu"
 date: "October 22, 2015"
 output: html_document
 ---
 
-#Introduction
+#Synopsis
 
 Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+By looking at the U.S. National Oceanic and Atmospheric Administration (NOAA) data, we were able to surface the following insights:
 
-This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+* From year 1995-2011:
+
+Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+Across the United States, which types of events have the greatest economic consequences?
+
+<hr>
 
 #Data
-
-The data for this assignment come in the form of a comma-separated-value file compressed via the bzip2 algorithm to reduce its size. You can download the file from the course web site:
-
-Storm Data [47Mb]
-There is also some documentation of the database available. Here you will find how some of the variables are constructed/defined.
-
-National Weather Service Storm Data Documentation
-
-National Climatic Data Center Storm Events FAQ
 
 The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
 
 
 
 
-Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
 
-Across the United States, which types of events have the greatest economic consequences?
+#Data Processing
 
+##Libraries utilized:
+```{r libraries, message=FALSE}
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(printr)
+```
+
+##Loading the raw data
+```{r data_loading, cache = TRUE}
+rawDataFile <- "repdata-data-StormData.csv.bz2"
+downloadURL <- "https://github.com/psiu/RepData_PeerAssessment2/raw/master/repdata-data-StormData.csv.bz2"
+
+##Ensure raw data file exists
+if(!file.exists(rawDataFile)){
+    download.file(downloadURL, rawDataFile)
+}
+
+##Load raw data
+noaa <- read.csv(rawDataFile, stringsAsFactors = FALSE, na.strings = c("", "NA"), strip.white = TRUE, colClasses = c(EVTYPE ="factor"))
+
+noaa <- tbl_df(noaa)
+```
+
+##Processing the data to form the tidy data set
+```{r data_processing, cache = TRUE}
+##Helper function to calculate exponents
+exp_calc <- function(exp = "") {
+    if(is.na(exp))
+        return (1)
+    else if(exp == "B" | exp == "b")
+        return (1000000000)
+    else if(exp == "M" | exp == "m")
+        return (1000000)
+    else if(exp == "K" | exp == "k")
+        return (1000)
+    else return (1)
+}
+
+##Convert exponent to actual numbers
+noaa$PROPDMGEXP_NUM <- sapply(noaa$PROPDMGEXP, exp_calc)
+noaa$CROPDMGEXP_NUM <- sapply(noaa$CROPDMGEXP, exp_calc)
+
+noaa <- noaa %>% mutate(propdamage = PROPDMG * PROPDMGEXP_NUM) %>% mutate(cropdamage = CROPDMG * CROPDMGEXP_NUM)
+
+##Format column
+noaa$BGN_DATE <- mdy_hms(noaa$BGN_DATE)
+##Extract just the year of the event
+noaa$Year <- year(noaa$BGN_DATE)
+
+##Select relevant columns for analysis
+noaa <- noaa %>% select(Year, EVTYPE, FATALITIES, INJURIES, propdamage, cropdamage)
+```
+
+The tidy data set "noaa" is ready for analysis.
+
+<hr>
+
+#Analysis
+
+##Subsetting the data from 1995 - 2011 to eliminate outliers
+
+```{r events}
+hist(noaa$Year, main = "Number of events recorded by year", xlab = "Year", col = "gray")
+
+year_print <- as.data.frame(noaa$Year)
+colnames(year_print) <- "Year Distribution Stats"
+summary(year_print)
+```
+
+By summarizing the year in which the events were recorded, we can see a significant difference in the number of events recorded before and after 1995.  To eliminate the bias driven by outliers, we will subset the data from the 1st quartile, which is year 1995 onwards.
+
+##Determine the top events that cause fatalities
+
+```{r fatalities}
+fatalities <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES)) %>% arrange(desc(FATALITIES))
+
+#Take only top 10 rows
+fatalities <- fatalities[1:10,]
+
+fatalities
+```
+
+##Determine the top events that cause injuries
+
+```{r injuries}
+injuries <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES)) %>% arrange(desc(INJURIES))
+
+#Take only top 10 rows
+injuries <- injuries[1:10,]
+
+injuries
+```
+
+##Determine the top events for property damage
+
+```{r property}
+prop <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
+
+#Take only top 10 rows
+prop <- prop[1:10,]
+
+prop
+```
+
+##Determine the top events for crop damage
+
+```{r crop}
+crop <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(cropdamage = sum(cropdamage)) %>% arrange(desc(cropdamage))
+
+#Take only top 10 rows
+crop <- crop[1:10,]
+
+crop
+```
+
+<hr>
+
+#Results
+
+##Across the United States, which types of events are most harmful with respect to population health?
+
+```{r q1}
+
+fig2_a <- ggplot(fatalities, aes(x = reorder(EVTYPE, FATALITIES), y = FATALITIES)) +
+    geom_bar(stat= "identity") +
+    coord_flip() +
+    labs (y = "Fatalities", x = "")
+
+fig2_b <- ggplot(injuries, aes(x = reorder(EVTYPE, INJURIES), y = INJURIES)) +
+    geom_bar(stat= "identity") +
+    coord_flip() +
+    labs (y = "Injuries", x = "")
+
+grid.arrange(fig2_a, fig2_b, nrow = 1)
+
+```
+
+
+##Across the United States, which types of events have the greatest economic consequences?
+
+
+
+```{r misc}
+# noaa$Outliers <- "Year 1995 - 2011"
+# noaa[noaa$Year < 1995, ]$Outliers <- "Year 1950 - 1994"
+# noaa$Outliers <- as.factor(noaa$Outliers)
+# 
+# 
+# noaa %>% group_by(EVTYPE) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
+# 
+# noaa %>% filter(Year > year("1995")) %>% group_by(EVTYPE) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
+
+
+
+
+# 
+# figure1 <- noaa %>% group_by(EVTYPE, Outliers) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
+# 
+# ggplot(figure1, aes(x = EVTYPE, y = propdamage)) + geom_bar(stat = "identity") + factor(. ~ Outliers)
+
+```

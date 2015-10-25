@@ -1,5 +1,5 @@
 ---
-title: "U.S. storm data in relation to population health and property damage"
+title: "U.S. storm data in relation to population health and economic damage"
 author: "Patrick Siu"
 date: "October 22, 2015"
 output: html_document
@@ -8,23 +8,20 @@ output: html_document
 #Synopsis
 
 Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
 By looking at the U.S. National Oceanic and Atmospheric Administration (NOAA) data, we were able to surface the following insights:
 
-* From year 1995-2011:
+* Population health:
 
-Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+    + When it comes to weather driven events, the top cause of fatalities is due to excessive heat.  1903 fatalities were recorded between 1995 - 2011.
 
-Across the United States, which types of events have the greatest economic consequences?
+    + When considering injuries, tornados are a significant health hazard with a recorded 21,765 injuries and 1545 fatalities between 1995-2011.
+
+* Economic damage:
+
+    + Floods cause the greatest economic consequences when considering property damage and crop damage.  Totalling in $149 billion USD in property and crop damage from 1995-2011.
 
 <hr>
-
-#Data
-
-The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
-
-
-
-
 
 #Data Processing
 
@@ -35,6 +32,9 @@ library(dplyr)
 library(ggplot2)
 library(gridExtra)
 library(printr)
+
+##Suppress scientific notation
+options(scipen=999)
 ```
 
 ##Loading the raw data
@@ -79,6 +79,10 @@ noaa$BGN_DATE <- mdy_hms(noaa$BGN_DATE)
 ##Extract just the year of the event
 noaa$Year <- year(noaa$BGN_DATE)
 
+##Express the monetary value in billions
+noaa$propdamage <- noaa$propdamage / 1000000000
+noaa$cropdamage <- noaa$cropdamage / 1000000000
+
 ##Select relevant columns for analysis
 noaa <- noaa %>% select(Year, EVTYPE, FATALITIES, INJURIES, propdamage, cropdamage)
 ```
@@ -91,6 +95,8 @@ The tidy data set "noaa" is ready for analysis.
 
 ##Subsetting the data from 1995 - 2011 to eliminate outliers
 
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. Let's take a look at the number of events with a histogram:
+
 ```{r events}
 hist(noaa$Year, main = "Number of events recorded by year", xlab = "Year", col = "gray")
 
@@ -101,7 +107,9 @@ summary(year_print)
 
 By summarizing the year in which the events were recorded, we can see a significant difference in the number of events recorded before and after 1995.  To eliminate the bias driven by outliers, we will subset the data from the 1st quartile, which is year 1995 onwards.
 
-##Determine the top events that cause fatalities
+<br>
+
+###Determine the top events that cause fatalities
 
 ```{r fatalities}
 fatalities <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES)) %>% arrange(desc(FATALITIES))
@@ -112,7 +120,7 @@ fatalities <- fatalities[1:10,]
 fatalities
 ```
 
-##Determine the top events that cause injuries
+###Determine the top events that cause injuries
 
 ```{r injuries}
 injuries <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(FATALITIES = sum(FATALITIES), INJURIES = sum(INJURIES)) %>% arrange(desc(INJURIES))
@@ -123,7 +131,7 @@ injuries <- injuries[1:10,]
 injuries
 ```
 
-##Determine the top events for property damage
+###Determine the top events for property damage
 
 ```{r property}
 prop <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
@@ -134,7 +142,7 @@ prop <- prop[1:10,]
 prop
 ```
 
-##Determine the top events for crop damage
+###Determine the top events for crop damage
 
 ```{r crop}
 crop <- noaa %>% filter(Year > 1994) %>% group_by(EVTYPE) %>% summarize(cropdamage = sum(cropdamage)) %>% arrange(desc(cropdamage))
@@ -163,31 +171,31 @@ fig2_b <- ggplot(injuries, aes(x = reorder(EVTYPE, INJURIES), y = INJURIES)) +
     coord_flip() +
     labs (y = "Injuries", x = "")
 
-grid.arrange(fig2_a, fig2_b, nrow = 1)
+grid.arrange(fig2_a, fig2_b, nrow = 1 , top = "Top causes of fatalities and injuries by U.S. storm events (1995-2011)")
 
 ```
 
+When it comes to weather driven events, the top cause of fatalities is due to excessive heat.  1903 fatalities were recorded between 1995 - 2011.
+
+When considering injuries, tornados are a significant health hazard with a recorded 21,765 injuries and 1545 fatalities between 1995-2011.
+
+<br>
 
 ##Across the United States, which types of events have the greatest economic consequences?
 
+```{r q2}
 
+fig3_a <- ggplot(prop, aes(x = reorder(EVTYPE, propdamage), y = propdamage)) +
+    geom_bar(stat= "identity") +
+    coord_flip() +
+    labs (y = "Property damage (billion)", x = "")
 
-```{r misc}
-# noaa$Outliers <- "Year 1995 - 2011"
-# noaa[noaa$Year < 1995, ]$Outliers <- "Year 1950 - 1994"
-# noaa$Outliers <- as.factor(noaa$Outliers)
-# 
-# 
-# noaa %>% group_by(EVTYPE) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
-# 
-# noaa %>% filter(Year > year("1995")) %>% group_by(EVTYPE) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
+fig3_b <- ggplot(crop, aes(x = reorder(EVTYPE, cropdamage), y = cropdamage)) +
+    geom_bar(stat= "identity") +
+    coord_flip() +
+    labs (y = "Crop damage (billion)", x = "")
 
-
-
-
-# 
-# figure1 <- noaa %>% group_by(EVTYPE, Outliers) %>% summarize(propdamage = sum(propdamage)) %>% arrange(desc(propdamage))
-# 
-# ggplot(figure1, aes(x = EVTYPE, y = propdamage)) + geom_bar(stat = "identity") + factor(. ~ Outliers)
-
+grid.arrange(fig3_a, fig3_b, nrow = 1, top = "Top causes of property and crop damage by U.S. storm events (1995-2011)")
 ```
+
+Floods cause the greatest economic consequences when considering property damage and crop damage.  Totalling in $149 billion USD in property and crop damage from 1995-2011.
